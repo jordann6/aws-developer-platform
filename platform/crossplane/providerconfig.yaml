@@ -8,6 +8,9 @@ metadata:
   name: default
   annotations:
     argocd.argoproj.io/sync-wave: "2"
+    # The ProviderConfig CRD only exists after the provider package (wave 1)
+    # installs, so skip ArgoCD's upfront dry-run validation for it.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   credentials:
     source: IRSA
