@@ -1,0 +1,14 @@
+# Example self-service request. A developer commits something like this (or uses
+# the Backstage golden-path template) and the platform provisions a hardened
+# bucket. Not reconciled by ArgoCD; apply manually to demo:
+#   kubectl create namespace team-apps
+#   kubectl apply -f examples/bucket-claim.yaml
+apiVersion: platform.jordann6.io/v1alpha1
+kind: Bucket
+metadata:
+  name: demo-bucket
+  namespace: team-apps
+spec:
+  parameters:
+    region: us-east-1
+    team: payments

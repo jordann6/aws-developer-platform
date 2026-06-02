@@ -1,0 +1,13 @@
+# ProviderConfig consumed by every managed resource. IRSA source means the
+# provider pod exchanges its projected ServiceAccount token for the IAM role.
+# Sync-wave 2: applied after the provider package (wave 1) is installed and its
+# CRDs exist.
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  credentials:
+    source: IRSA

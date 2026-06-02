@@ -1,0 +1,28 @@
+# Guardrail: pods in namespaces labeled team-policy=enforce must declare an
+# owning team. Scoped by namespaceSelector so platform/system namespaces are
+# unaffected. Demonstrates policy-as-code admission control.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-team-label
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  background: true
+  rules:
+    - name: require-team-on-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: "Pods in enforced namespaces must set the 'app.kubernetes.io/team' label."
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/team: "?*"

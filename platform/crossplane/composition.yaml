@@ -1,0 +1,84 @@
+# Composition for XBucket: every self-service bucket is hardened by default with
+# public access fully blocked, AES256 encryption, and versioning enabled. The
+# developer cannot opt out, which is the point of a paved road.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xbuckets.platform.jordann6.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  compositeTypeRef:
+    apiVersion: platform.jordann6.io/v1alpha1
+    kind: XBucket
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: Bucket
+              spec:
+                forProvider:
+                  region: us-east-1
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - fromFieldPath: spec.parameters.team
+                toFieldPath: spec.forProvider.tags.team
+              - type: ToCompositeFieldPath
+                fromFieldPath: metadata.annotations[crossplane.io/external-name]
+                toFieldPath: status.bucketName
+          - name: public-access-block
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketPublicAccessBlock
+              spec:
+                forProvider:
+                  region: us-east-1
+                  blockPublicAcls: true
+                  blockPublicPolicy: true
+                  ignorePublicAcls: true
+                  restrictPublicBuckets: true
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+          - name: encryption
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketServerSideEncryptionConfiguration
+              spec:
+                forProvider:
+                  region: us-east-1
+                  rule:
+                    - applyServerSideEncryptionByDefault:
+                        - sseAlgorithm: AES256
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+          - name: versioning
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketVersioning
+              spec:
+                forProvider:
+                  region: us-east-1
+                  versioningConfiguration:
+                    - status: Enabled
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region

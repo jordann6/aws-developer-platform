@@ -1,0 +1,12 @@
+replicaCount: 2
+
+image:
+  repository: REPLACE_WITH_YOUR_REGISTRY/${{ values.name }}
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+  targetPort: 8080
+
+team: ${{ values.owner }}

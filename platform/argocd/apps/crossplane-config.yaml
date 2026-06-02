@@ -1,0 +1,33 @@
+# Crossplane provider, IRSA config, and the self-service Bucket API (XRD +
+# Composition). Wave 2: applied after the Crossplane control plane is up. ArgoCD
+# retries until the provider package CRDs exist, so ordering self-heals.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jordann6/aws-developer-platform
+    targetRevision: main
+    path: platform/crossplane
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 30
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

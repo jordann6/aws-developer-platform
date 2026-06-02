@@ -1,0 +1,47 @@
+# The self-service API exposed to developers. A developer creates a namespaced
+# "Bucket" claim with a team name; the platform composes a hardened S3 bucket.
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xbuckets.platform.jordann6.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  group: platform.jordann6.io
+  names:
+    kind: XBucket
+    plural: xbuckets
+  claimNames:
+    kind: Bucket
+    plural: buckets
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  properties:
+                    region:
+                      type: string
+                      default: us-east-1
+                      description: AWS region for the bucket.
+                    team:
+                      type: string
+                      description: Owning team, applied as a tag.
+                  required:
+                    - team
+              required:
+                - parameters
+            status:
+              type: object
+              properties:
+                bucketName:
+                  type: string
+                  description: Name of the provisioned S3 bucket.

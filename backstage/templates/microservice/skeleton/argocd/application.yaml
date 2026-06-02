@@ -1,0 +1,22 @@
+# GitOps entrypoint for this service. The platform's ArgoCD renders the Helm
+# chart below. Adjust repoURL if your repo is not under github.com/jordann6.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${{ values.name }}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jordann6/${{ values.name }}
+    targetRevision: main
+    path: helm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${{ values.name }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

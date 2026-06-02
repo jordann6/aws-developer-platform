@@ -1,0 +1,13 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+tf.plan
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+
+# Backstage scaffolder / node
+node_modules/
+
+.DS_Store

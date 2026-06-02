@@ -1,0 +1,85 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: microservice-golden-path
+  title: New Microservice (Golden Path)
+  description: |
+    Scaffold a production-ready microservice that plugs straight into this
+    platform: containerized, with a Helm chart and an ArgoCD Application so it
+    is deployable via GitOps the moment it exists.
+  tags:
+    - recommended
+    - golden-path
+    - kubernetes
+spec:
+  owner: platform-team
+  type: service
+
+  parameters:
+    - title: Service details
+      required:
+        - name
+        - owner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Unique name for the service (DNS-safe).
+          pattern: "^[a-z0-9-]+$"
+        owner:
+          title: Owning team
+          type: string
+          description: Team that owns this service.
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+        description:
+          title: Description
+          type: string
+          description: What does this service do?
+    - title: Repository
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+
+  steps:
+    - id: fetch
+      name: Fetch skeleton
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          description: ${{ parameters.description }}
+
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        description: ${{ parameters.description }}
+        defaultBranch: main
+
+    - id: register
+      name: Register in catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+
+  output:
+    links:
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
