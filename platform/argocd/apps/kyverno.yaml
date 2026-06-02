@@ -21,6 +21,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # Kyverno's ClusterPolicy/Policy CRDs exceed the client-side apply
+      # annotation size limit; server-side apply is required.
+      - ServerSideApply=true
     retry:
       limit: 10
       backoff:
