@@ -125,6 +125,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect
     if: needs.detect.outputs.has_dockerfile == 'true'
+    # Non-blocking: some Dockerfiles (e.g. Backstage) need an app build before
+    # they are buildable from a plain checkout. Report-only at rollout.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Build image
