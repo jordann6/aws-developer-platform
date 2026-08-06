@@ -1,6 +1,6 @@
 # AWS Developer Platform
 
-[![Validate](https://github.com/jordann6/aws-developer-platform/actions/workflows/validate.yml/badge.svg)](https://github.com/jordann6/aws-developer-platform/actions/workflows/validate.yml)
+[![Security Gate](https://github.com/jordann6/aws-developer-platform/actions/workflows/security-gate.yml/badge.svg)](https://github.com/jordann6/aws-developer-platform/actions/workflows/security-gate.yml)
 
 An Internal Developer Platform on EKS that gives application teams a paved road: self-service infrastructure, GitOps delivery, golden-path scaffolding, and policy guardrails. Developers consume simple, safe abstractions; the platform handles the hardening, IAM, and reconciliation underneath.
 
