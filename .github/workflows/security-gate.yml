@@ -86,7 +86,7 @@ jobs:
         with:
           soft_fail: true
       - name: Trivy IaC misconfiguration scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -119,27 +119,28 @@ jobs:
             echo "No requirements file found, skipping dependency CVE scan."
           fi
 
-  # Container image scan. Only when a Dockerfile is present. Report-only at rollout.
+  # Dockerfile misconfiguration scan. Only when a Dockerfile is present.
+  #
+  # This scans the Dockerfile rather than building and scanning an image. The
+  # Backstage image is a *packaged* build: its Dockerfile COPYs
+  # packages/backend/dist/bundle.tar.gz, an artifact produced by `yarn build`
+  # and correctly gitignored, so `docker build` from a plain checkout can never
+  # succeed here. Building it in CI just to scan it would mean running a full
+  # Backstage build on every push for no added signal. Config scanning catches
+  # the Dockerfile-level issues (root user, missing USER, unpinned base tags)
+  # from the source that is actually in the repo. Report-only at rollout.
   container:
-    name: Container scan (Trivy)
+    name: Dockerfile config scan (Trivy)
     runs-on: ubuntu-latest
     needs: detect
     if: needs.detect.outputs.has_dockerfile == 'true'
-    # Non-blocking: some Dockerfiles (e.g. Backstage) need an app build before
-    # they are buildable from a plain checkout. Report-only at rollout.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: |
-          df=$(find . -iname 'Dockerfile' -not -path './.git/*' | head -1)
-          docker build -f "$df" -t local-scan-target:${{ github.sha }} "$(dirname "$df")"
-      - name: Trivy image scan
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy Dockerfile config scan
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-type: image
-          image-ref: local-scan-target:${{ github.sha }}
+          scan-type: config
+          scan-ref: .
           format: table
           exit-code: "0"
-          ignore-unfixed: true
           severity: CRITICAL,HIGH
