@@ -12,3 +12,5 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    with:
+      skip_container: true
