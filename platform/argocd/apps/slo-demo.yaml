@@ -1,0 +1,32 @@
+# The service the SLOs are written about, plus its in-cluster load generator.
+# Wave 3: after ingress-nginx exists to admit the Ingress.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: slo-demo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jordann6/aws-developer-platform
+    targetRevision: main
+    path: platform/slo/workload
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: slo-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 20
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

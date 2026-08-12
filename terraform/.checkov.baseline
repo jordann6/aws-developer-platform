@@ -1,0 +1,39 @@
+{
+    "failed_checks": [
+        {
+            "file": "/eks.tf",
+            "findings": [
+                {
+                    "resource": "eks",
+                    "check_ids": [
+                        "CKV_TF_1"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/iam-irsa.tf",
+            "findings": [
+                {
+                    "resource": "aws_iam_policy_document.crossplane_s3",
+                    "check_ids": [
+                        "CKV_AWS_109",
+                        "CKV_AWS_111",
+                        "CKV_AWS_356"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/vpc.tf",
+            "findings": [
+                {
+                    "resource": "vpc",
+                    "check_ids": [
+                        "CKV_TF_1"
+                    ]
+                }
+            ]
+        }
+    ]
+}

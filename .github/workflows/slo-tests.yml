@@ -1,0 +1,39 @@
+# Alerting rules are code, so they get tested in CI like code. This catches the
+# failure mode that matters: a rule that parses fine, deploys fine, and never
+# fires during the outage it was written for.
+name: SLO rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/slo/**"
+      - ".github/workflows/slo-tests.yml"
+  pull_request:
+    paths:
+      - "platform/slo/**"
+      - ".github/workflows/slo-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  promtool:
+    name: Recording rules and burn-rate alerts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install promtool
+        env:
+          PROM_VERSION: "3.13.2"
+        run: |
+          set -euo pipefail
+          curl -sfL -o prom.tar.gz \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+          tar xzf prom.tar.gz
+          sudo install "prometheus-${PROM_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
+          promtool --version
+
+      - name: Check rule syntax and run alert unit tests
+        run: ./scripts/slo-test.sh

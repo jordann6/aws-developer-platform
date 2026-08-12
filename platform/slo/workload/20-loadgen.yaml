@@ -1,0 +1,82 @@
+# Synthetic traffic. SLIs measured against zero traffic are undefined, so the
+# platform generates its own baseline load rather than depending on a human
+# curling in a loop.
+#
+# The failure injection knob lives here: flip TARGET_MODE in this ConfigMap and
+# restart the deployment, and the service starts serving errors or serving
+# slowly. Everything downstream (SLI, error budget, burn rate, alert, runbook)
+# reacts on its own. scripts/slo-demo.sh drives it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadgen-config
+  namespace: slo-demo
+data:
+  # healthy | errors | slow
+  TARGET_MODE: "healthy"
+  # Status code returned in "errors" mode.
+  ERROR_CODE: "503"
+  # Server-side stall, in seconds, in "slow" mode. Above the 250ms latency
+  # objective, so these requests count as latency-SLI failures.
+  SLOW_SECONDS: "0.6"
+  # Requests per second, per replica, roughly.
+  TARGET_RPS: "10"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  namespace: slo-demo
+  labels:
+    app.kubernetes.io/name: loadgen
+    app.kubernetes.io/team: payments
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loadgen
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loadgen
+        app.kubernetes.io/team: payments
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: curl
+          image: curlimages/curl:8.10.1
+          envFrom:
+            - configMapRef:
+                name: loadgen-config
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              INGRESS="http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+              HOST="checkout.slo-demo.svc"
+              case "$TARGET_MODE" in
+                errors) PATH_SUFFIX="/status/${ERROR_CODE}" ;;
+                slow)   PATH_SUFFIX="/delay/${SLOW_SECONDS}" ;;
+                *)      PATH_SUFFIX="/status/200" ;;
+              esac
+              INTERVAL=$(awk -v r="$TARGET_RPS" 'BEGIN { printf "%.3f", 1 / r }')
+              echo "loadgen: mode=${TARGET_MODE} path=${PATH_SUFFIX} rps=${TARGET_RPS}"
+              while true; do
+                curl -s -o /dev/null --max-time 5 \
+                  -H "Host: ${HOST}" "${INGRESS}${PATH_SUFFIX}" || true
+                sleep "$INTERVAL"
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

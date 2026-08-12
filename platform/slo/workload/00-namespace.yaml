@@ -1,0 +1,10 @@
+# The measured service lives in an enforced namespace, so it has to satisfy the
+# platform's own Kyverno guardrail (app.kubernetes.io/team on every pod). A
+# reliability workload is not exempt from the paved road.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slo-demo
+  labels:
+    team-policy: enforce
+    app.kubernetes.io/part-of: aws-developer-platform

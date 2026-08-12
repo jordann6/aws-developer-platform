@@ -1,0 +1,170 @@
+# Multi-window, multi-burn-rate alerting (Google SRE Workbook, chapter 5).
+#
+# Why not a simple "error rate > 1%" threshold: a static threshold either pages
+# on a two-minute blip that costs 0.1% of the budget, or sleeps through a slow
+# leak that spends the whole month. Burn rate fixes both by asking a different
+# question: at the current error rate, how fast is the 30-day budget being
+# consumed? Burn rate 1 spends the budget exactly at month end. Burn rate 14.4
+# spends it in about 50 hours, so 2% of the budget is gone in the first hour.
+#
+# Each alert pairs a long window (is this real?) with a short window (is it
+# still happening?). The short window is what makes the alert resolve promptly
+# after recovery, instead of hanging around for the length of the long window.
+#
+#   burn   long / short   budget spent    severity
+#   14.4   1h  / 5m       2% in 1h        page
+#   6      6h  / 30m      5% in 6h        page
+#   3      1d  / 2h       10% in 1d       ticket
+#   1      3d  / 6h       10% in 3d       ticket
+#
+# Objectives:
+#   availability  99.5% of requests non-5xx over 30d   budget 0.005
+#   latency       99% of requests under 250ms over 30d  budget 0.01
+#
+# Thresholds are written as `multiplier * budget` rather than precomputed, so
+# changing an objective is a one-number edit and the arithmetic stays auditable
+# in the alert itself.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-burn-rate-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    slo-service: checkout-api
+spec:
+  groups:
+    - name: slo.checkout-api.availability.burn
+      rules:
+        - alert: CheckoutAPIAvailabilityFastBurn
+          expr: |
+            slo:availability_errors:ratio_rate1h{slo="checkout-api-availability"} > (14.4 * 0.005)
+            and
+            slo:availability_errors:ratio_rate5m{slo="checkout-api-availability"} > (14.4 * 0.005)
+          for: 2m
+          labels:
+            severity: page
+            slo: checkout-api-availability
+          annotations:
+            summary: "checkout-api is burning its availability budget 14.4x too fast"
+            description: >-
+              {{ $value | humanizePercentage }} of requests are failing. At this rate the
+              30-day error budget is gone in about 2 days, and 2% of it is already spent.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+
+        - alert: CheckoutAPIAvailabilitySlowBurn
+          expr: |
+            slo:availability_errors:ratio_rate6h{slo="checkout-api-availability"} > (6 * 0.005)
+            and
+            slo:availability_errors:ratio_rate30m{slo="checkout-api-availability"} > (6 * 0.005)
+          for: 15m
+          labels:
+            severity: page
+            slo: checkout-api-availability
+          annotations:
+            summary: "checkout-api is burning its availability budget 6x too fast"
+            description: >-
+              {{ $value | humanizePercentage }} of requests have been failing for hours.
+              Roughly 5% of the 30-day budget is spent.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+
+        - alert: CheckoutAPIAvailabilityBudgetLeak
+          expr: |
+            slo:availability_errors:ratio_rate1d{slo="checkout-api-availability"} > (3 * 0.005)
+            and
+            slo:availability_errors:ratio_rate2h{slo="checkout-api-availability"} > (3 * 0.005)
+          for: 1h
+          labels:
+            severity: ticket
+            slo: checkout-api-availability
+          annotations:
+            summary: "checkout-api availability budget is leaking (3x burn)"
+            description: >-
+              Sustained {{ $value | humanizePercentage }} error rate over a day. Not worth
+              waking anyone, but the month is at risk if it continues.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+
+        - alert: CheckoutAPIAvailabilityBudgetDrain
+          expr: |
+            slo:availability_errors:ratio_rate3d{slo="checkout-api-availability"} > (1 * 0.005)
+            and
+            slo:availability_errors:ratio_rate6h{slo="checkout-api-availability"} > (1 * 0.005)
+          for: 3h
+          labels:
+            severity: ticket
+            slo: checkout-api-availability
+          annotations:
+            summary: "checkout-api is on pace to exactly exhaust its availability budget"
+            description: >-
+              A 1x burn over three days means the SLO is missed at the end of the window
+              with no margin for a real incident.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+
+    - name: slo.checkout-api.latency.burn
+      rules:
+        - alert: CheckoutAPILatencyFastBurn
+          expr: |
+            slo:latency_errors:ratio_rate1h{slo="checkout-api-latency"} > (14.4 * 0.01)
+            and
+            slo:latency_errors:ratio_rate5m{slo="checkout-api-latency"} > (14.4 * 0.01)
+          for: 2m
+          labels:
+            severity: page
+            slo: checkout-api-latency
+          annotations:
+            summary: "checkout-api is burning its latency budget 14.4x too fast"
+            description: >-
+              {{ $value | humanizePercentage }} of requests are slower than the 250ms
+              objective. The service is up, so availability alerts will stay silent.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md"
+
+        - alert: CheckoutAPILatencySlowBurn
+          expr: |
+            slo:latency_errors:ratio_rate6h{slo="checkout-api-latency"} > (6 * 0.01)
+            and
+            slo:latency_errors:ratio_rate30m{slo="checkout-api-latency"} > (6 * 0.01)
+          for: 15m
+          labels:
+            severity: page
+            slo: checkout-api-latency
+          annotations:
+            summary: "checkout-api is burning its latency budget 6x too fast"
+            description: >-
+              {{ $value | humanizePercentage }} of requests have exceeded 250ms for hours.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md"
+
+        - alert: CheckoutAPILatencyBudgetLeak
+          expr: |
+            slo:latency_errors:ratio_rate1d{slo="checkout-api-latency"} > (3 * 0.01)
+            and
+            slo:latency_errors:ratio_rate2h{slo="checkout-api-latency"} > (3 * 0.01)
+          for: 1h
+          labels:
+            severity: ticket
+            slo: checkout-api-latency
+          annotations:
+            summary: "checkout-api latency budget is leaking (3x burn)"
+            description: >-
+              Sustained slowness over a day at {{ $value | humanizePercentage }} of requests
+              over 250ms.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md"
+
+    - name: slo.checkout-api.meta
+      rules:
+        # An SLI that reports nothing is not an SLI that reports success. If the
+        # ingress stops producing request metrics, every burn-rate expression
+        # above goes empty and every alert silently resolves. This is the alert
+        # that catches the monitoring failing rather than the service failing.
+        - alert: CheckoutAPISLIMissing
+          expr: absent(slo:availability_errors:ratio_rate5m{slo="checkout-api-availability"})
+          for: 10m
+          labels:
+            severity: page
+            slo: checkout-api-availability
+          annotations:
+            summary: "No SLI data for checkout-api: the SLOs are unmeasured, not met"
+            description: >-
+              The availability SLI has produced no samples for 10 minutes. Check that
+              ingress-nginx is exporting metrics, that its ServiceMonitor is still
+              selected by Prometheus, and that the Ingress is still named slo-demo.
+            runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"

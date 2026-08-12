@@ -1,0 +1,183 @@
+# SLI recording rules for the checkout-api service.
+#
+# Two SLIs, both measured at the ingress proxy:
+#
+#   availability  fraction of requests that did not return 5xx
+#   latency       fraction of requests served in under 250ms
+#
+# Every alert window is precomputed here rather than inlined into alert
+# expressions. That keeps the burn-rate alerts readable, keeps the dashboard
+# and the alerts reading the exact same number, and means a change to how an
+# SLI is defined happens in one place.
+#
+# The `or on() vector(0)` on each numerator matters: when a service has served
+# zero errors, the 5xx series does not exist at all, and without it the ratio
+# evaluates to empty instead of to zero. A healthy service would then produce
+# gaps in the dashboard rather than a flat line at 100%.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-sli-recording-rules
+  namespace: monitoring
+  labels:
+    # kube-prometheus-stack's Prometheus selects rules by this label.
+    release: kube-prometheus-stack
+    slo-service: checkout-api
+spec:
+  groups:
+    - name: slo.checkout-api.availability
+      interval: 30s
+      rules:
+        - record: slo:availability_errors:ratio_rate5m
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[5m])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[5m]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate30m
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[30m])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[30m]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate1h
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[1h])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[1h]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate2h
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[2h])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[2h]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate6h
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[6h])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[6h]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate1d
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[1d])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[1d]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:availability_errors:ratio_rate3d
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[3d])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[3d]))
+          labels: { slo: checkout-api-availability }
+
+    - name: slo.checkout-api.latency
+      interval: 30s
+      rules:
+        # "Slower than 250ms" is read off a histogram bucket edge. 0.25 is a
+        # default ingress-nginx bucket boundary, which is why the objective is
+        # 250ms: an objective set between bucket edges can only be interpolated,
+        # and an interpolated SLO is an estimate being reported as a fact.
+        - record: slo:latency_errors:ratio_rate5m
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[5m]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[5m]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate30m
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[30m]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[30m]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate1h
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[1h]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[1h]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate2h
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[2h]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[2h]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate6h
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[6h]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[6h]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate1d
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[1d]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[1d]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:latency_errors:ratio_rate3d
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[3d]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[3d]))
+            )
+          labels: { slo: checkout-api-latency }
+
+    - name: slo.checkout-api.budget
+      interval: 1m
+      rules:
+        # Error budget remaining, as a fraction of the budget itself. 1 means
+        # the full budget is intact, 0 means it is spent, negative means the
+        # SLO is already missed for the window.
+        #
+        # The compliance window is 30d. On a cluster that gets destroyed the
+        # same day, this reads as "budget remaining so far", not as a real
+        # 30-day figure. It is here because the dashboard panel and the alert
+        # thresholds have to agree on one definition of the budget.
+        - record: slo:availability_errors:ratio_rate30d
+          expr: |
+            (sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[30d])) or on() vector(0))
+            /
+            sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[30d]))
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:error_budget_remaining:ratio
+          expr: 1 - (slo:availability_errors:ratio_rate30d{slo="checkout-api-availability"} / 0.005)
+          labels: { slo: checkout-api-availability }
+
+        - record: slo:latency_errors:ratio_rate30d
+          expr: |
+            1 - (
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}[30d]))
+              /
+              sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}[30d]))
+            )
+          labels: { slo: checkout-api-latency }
+
+        - record: slo:error_budget_remaining:ratio
+          expr: 1 - (slo:latency_errors:ratio_rate30d{slo="checkout-api-latency"} / 0.01)
+          labels: { slo: checkout-api-latency }

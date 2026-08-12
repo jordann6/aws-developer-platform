@@ -1,0 +1,155 @@
+groups:
+- name: slo.checkout-api.availability
+  interval: 30s
+  rules:
+  - record: slo:availability_errors:ratio_rate5m
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[5m]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[5m]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate30m
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[30m]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[30m]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate1h
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[1h]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[1h]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate2h
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[2h]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[2h]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate6h
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[6h]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[6h]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate1d
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[1d]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[1d]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:availability_errors:ratio_rate3d
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[3d]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[3d]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+- name: slo.checkout-api.latency
+  interval: 30s
+  rules:
+  - record: slo:latency_errors:ratio_rate5m
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[5m]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[5m]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate30m
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[30m]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[30m]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate1h
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[1h]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[1h]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate2h
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[2h]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[2h]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate6h
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[6h]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[6h]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate1d
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[1d]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[1d]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:latency_errors:ratio_rate3d
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[3d]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[3d]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+- name: slo.checkout-api.budget
+  interval: 1m
+  rules:
+  - record: slo:availability_errors:ratio_rate30d
+    expr: '(sum(rate(nginx_ingress_controller_requests{ingress="slo-demo",status=~"5.."}[30d]))
+      or on() vector(0))
+
+      /
+
+      sum(rate(nginx_ingress_controller_requests{ingress="slo-demo"}[30d]))
+
+      '
+    labels:
+      slo: checkout-api-availability
+  - record: slo:error_budget_remaining:ratio
+    expr: 1 - (slo:availability_errors:ratio_rate30d{slo="checkout-api-availability"}
+      / 0.005)
+    labels:
+      slo: checkout-api-availability
+  - record: slo:latency_errors:ratio_rate30d
+    expr: "1 - (\n  sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"\
+      slo-demo\",le=\"0.25\"}[30d]))\n  /\n  sum(rate(nginx_ingress_controller_request_duration_seconds_count{ingress=\"\
+      slo-demo\"}[30d]))\n)\n"
+    labels:
+      slo: checkout-api-latency
+  - record: slo:error_budget_remaining:ratio
+    expr: 1 - (slo:latency_errors:ratio_rate30d{slo="checkout-api-latency"} / 0.01)
+    labels:
+      slo: checkout-api-latency

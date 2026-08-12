@@ -1,0 +1,316 @@
+# SLO dashboard, delivered as a ConfigMap. kube-prometheus-stack's Grafana
+# sidecar watches every namespace for the grafana_dashboard=1 label and imports
+# what it finds, so the dashboard is version-controlled and reconciled by
+# ArgoCD like everything else. Nobody clicks "save" in the Grafana UI, and a
+# dashboard edited by hand is reverted on the next sync.
+#
+# The dashboard reads the same recording rules the alerts fire on. That is the
+# point: what a human sees during an incident and what paged them are the same
+# number, so there is never a "the dashboard says we are fine" argument.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slo-checkout-api-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    slo-service: checkout-api
+data:
+  checkout-api-slo.json: |
+    {
+      "title": "SLO: checkout-api",
+      "uid": "slo-checkout-api",
+      "tags": ["slo", "sre", "platform"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Availability SLI",
+          "description": "Fraction of requests not returning 5xx. Objective: 99.5%.",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "1 - slo:availability_errors:ratio_rate1h{slo=\"checkout-api-availability\"}",
+              "legendFormat": "1h"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 3,
+              "min": 0.9,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.99 },
+                  { "color": "green", "value": 0.995 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Latency SLI",
+          "description": "Fraction of requests served under 250ms. Objective: 99%.",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "1 - slo:latency_errors:ratio_rate1h{slo=\"checkout-api-latency\"}",
+              "legendFormat": "1h"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 3,
+              "min": 0.9,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.98 },
+                  { "color": "green", "value": 0.99 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Availability error budget remaining",
+          "description": "Share of the 30-day budget still unspent. Below zero, the SLO is missed.",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "slo:error_budget_remaining:ratio{slo=\"checkout-api-availability\"}",
+              "legendFormat": "budget left"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 1,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.25 },
+                  { "color": "green", "value": 0.5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Latency error budget remaining",
+          "description": "Share of the 30-day latency budget still unspent.",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "slo:error_budget_remaining:ratio{slo=\"checkout-api-latency\"}",
+              "legendFormat": "budget left"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 1,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.25 },
+                  { "color": "green", "value": 0.5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Availability burn rate (multiples of budget)",
+          "description": "Error rate divided by the 0.005 budget. The 14.4 line is the fast-burn page threshold; 1.0 is the pace that exactly exhausts the budget at 30 days.",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "slo:availability_errors:ratio_rate5m{slo=\"checkout-api-availability\"} / 0.005",
+              "legendFormat": "5m"
+            },
+            {
+              "refId": "B",
+              "expr": "slo:availability_errors:ratio_rate1h{slo=\"checkout-api-availability\"} / 0.005",
+              "legendFormat": "1h"
+            },
+            {
+              "refId": "C",
+              "expr": "slo:availability_errors:ratio_rate6h{slo=\"checkout-api-availability\"} / 0.005",
+              "legendFormat": "6h"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 1,
+              "custom": { "fillOpacity": 5, "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 6 },
+                  { "color": "red", "value": 14.4 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Request rate by status class",
+          "description": "Traffic at the ingress. Confirms the SLI has something to measure.",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (status) (rate(nginx_ingress_controller_requests{ingress=\"slo-demo\"}[5m]))",
+              "legendFormat": "{{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "decimals": 1,
+              "custom": { "fillOpacity": 20, "lineWidth": 1, "stacking": { "mode": "normal" } }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Latency burn rate (multiples of budget)",
+          "description": "Share of requests over 250ms, divided by the 0.01 budget.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "slo:latency_errors:ratio_rate5m{slo=\"checkout-api-latency\"} / 0.01",
+              "legendFormat": "5m"
+            },
+            {
+              "refId": "B",
+              "expr": "slo:latency_errors:ratio_rate1h{slo=\"checkout-api-latency\"} / 0.01",
+              "legendFormat": "1h"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 1,
+              "custom": { "fillOpacity": 5, "lineWidth": 2 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Request latency percentiles",
+          "description": "p50, p90 and p99 at the ingress, with the 250ms objective for reference.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.50, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"slo-demo\"}[5m])))",
+              "legendFormat": "p50"
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.90, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"slo-demo\"}[5m])))",
+              "legendFormat": "p90"
+            },
+            {
+              "refId": "C",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{ingress=\"slo-demo\"}[5m])))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 3,
+              "custom": { "fillOpacity": 0, "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 0.25 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        }
+      ]
+    }

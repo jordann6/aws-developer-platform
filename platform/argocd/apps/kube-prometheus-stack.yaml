@@ -1,0 +1,101 @@
+# Prometheus, Alertmanager and Grafana (Helm). Wave 2: the metrics substrate
+# every SLO in platform/slo/rules is evaluated against.
+#
+# Storage is deliberately ephemeral (no storageSpec, so Prometheus gets an
+# emptyDir). This is a deploy/demo/destroy platform: a PVC here would outlive
+# `terraform destroy` and leave an orphaned EBS volume billing quietly.
+# Retention is sized to cover the longest burn-rate window plus headroom.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 65.1.1
+    helm:
+      values: |
+        prometheus:
+          prometheusSpec:
+            retention: 4d
+            retentionSize: 8GB
+            scrapeInterval: 15s
+            evaluationInterval: 15s
+            # Discover ServiceMonitors and PrometheusRules from every namespace,
+            # not just ones carrying this release's Helm labels.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 1Gi
+              limits:
+                memory: 2Gi
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 128Mi
+          config:
+            route:
+              group_by: ["alertname", "slo"]
+              receiver: "null"
+              routes:
+                # Fast burn is the only thing that would wake a human. Slow burn
+                # and ticket-severity alerts ride the default route.
+                - matchers: ["severity = page"]
+                  receiver: "null"
+                  group_wait: 30s
+                  repeat_interval: 1h
+            receivers:
+              - name: "null"
+        grafana:
+          defaultDashboardsTimezone: browser
+          # Demo credentials, reachable only through `kubectl port-forward`.
+          # There is no ingress and no LoadBalancer in front of Grafana.
+          adminPassword: prom-operator
+          service:
+            type: ClusterIP
+          sidecar:
+            dashboards:
+              enabled: true
+              searchNamespace: ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+        # The node group is two t3.large instances shared with the rest of the
+        # platform, so the optional scrapers stay off.
+        kubeEtcd:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus Operator CRDs exceed the client-side apply annotation
+      # size limit, same as Kyverno's.
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

@@ -1,0 +1,57 @@
+# ingress-nginx (Helm). Wave 2.
+#
+# This is the SLI measurement point. Availability and latency are measured at
+# the proxy, not inside the application, so the numbers stay honest when the
+# app is crash-looping and reporting nothing at all.
+#
+# The controller Service is ClusterIP on purpose: exposing it would provision
+# an NLB and add roughly $16/month to a platform that is meant to be destroyed
+# the same day. Traffic is generated inside the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes.github.io/ingress-nginx
+    chart: ingress-nginx
+    targetRevision: 4.11.3
+    helm:
+      values: |
+        controller:
+          replicaCount: 1
+          service:
+            type: ClusterIP
+          # Latency SLIs read a histogram bucket boundary, so the SLO threshold
+          # has to land on a real bucket edge. 0.25s is a default edge; that is
+          # why the latency objective is 250ms and not a rounder 300ms.
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+              scrapeInterval: 15s
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          admissionWebhooks:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress-nginx
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

@@ -1,0 +1,147 @@
+groups:
+- name: slo.checkout-api.availability.burn
+  rules:
+  - alert: CheckoutAPIAvailabilityFastBurn
+    expr: 'slo:availability_errors:ratio_rate1h{slo="checkout-api-availability"} >
+      (14.4 * 0.005)
+
+      and
+
+      slo:availability_errors:ratio_rate5m{slo="checkout-api-availability"} > (14.4
+      * 0.005)
+
+      '
+    for: 2m
+    labels:
+      severity: page
+      slo: checkout-api-availability
+    annotations:
+      summary: checkout-api is burning its availability budget 14.4x too fast
+      description: '{{ $value | humanizePercentage }} of requests are failing. At
+        this rate the 30-day error budget is gone in about 2 days, and 2% of it is
+        already spent.'
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md
+  - alert: CheckoutAPIAvailabilitySlowBurn
+    expr: 'slo:availability_errors:ratio_rate6h{slo="checkout-api-availability"} >
+      (6 * 0.005)
+
+      and
+
+      slo:availability_errors:ratio_rate30m{slo="checkout-api-availability"} > (6
+      * 0.005)
+
+      '
+    for: 15m
+    labels:
+      severity: page
+      slo: checkout-api-availability
+    annotations:
+      summary: checkout-api is burning its availability budget 6x too fast
+      description: '{{ $value | humanizePercentage }} of requests have been failing
+        for hours. Roughly 5% of the 30-day budget is spent.'
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md
+  - alert: CheckoutAPIAvailabilityBudgetLeak
+    expr: 'slo:availability_errors:ratio_rate1d{slo="checkout-api-availability"} >
+      (3 * 0.005)
+
+      and
+
+      slo:availability_errors:ratio_rate2h{slo="checkout-api-availability"} > (3 *
+      0.005)
+
+      '
+    for: 1h
+    labels:
+      severity: ticket
+      slo: checkout-api-availability
+    annotations:
+      summary: checkout-api availability budget is leaking (3x burn)
+      description: Sustained {{ $value | humanizePercentage }} error rate over a day.
+        Not worth waking anyone, but the month is at risk if it continues.
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md
+  - alert: CheckoutAPIAvailabilityBudgetDrain
+    expr: 'slo:availability_errors:ratio_rate3d{slo="checkout-api-availability"} >
+      (1 * 0.005)
+
+      and
+
+      slo:availability_errors:ratio_rate6h{slo="checkout-api-availability"} > (1 *
+      0.005)
+
+      '
+    for: 3h
+    labels:
+      severity: ticket
+      slo: checkout-api-availability
+    annotations:
+      summary: checkout-api is on pace to exactly exhaust its availability budget
+      description: A 1x burn over three days means the SLO is missed at the end of
+        the window with no margin for a real incident.
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md
+- name: slo.checkout-api.latency.burn
+  rules:
+  - alert: CheckoutAPILatencyFastBurn
+    expr: 'slo:latency_errors:ratio_rate1h{slo="checkout-api-latency"} > (14.4 * 0.01)
+
+      and
+
+      slo:latency_errors:ratio_rate5m{slo="checkout-api-latency"} > (14.4 * 0.01)
+
+      '
+    for: 2m
+    labels:
+      severity: page
+      slo: checkout-api-latency
+    annotations:
+      summary: checkout-api is burning its latency budget 14.4x too fast
+      description: '{{ $value | humanizePercentage }} of requests are slower than
+        the 250ms objective. The service is up, so availability alerts will stay silent.'
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md
+  - alert: CheckoutAPILatencySlowBurn
+    expr: 'slo:latency_errors:ratio_rate6h{slo="checkout-api-latency"} > (6 * 0.01)
+
+      and
+
+      slo:latency_errors:ratio_rate30m{slo="checkout-api-latency"} > (6 * 0.01)
+
+      '
+    for: 15m
+    labels:
+      severity: page
+      slo: checkout-api-latency
+    annotations:
+      summary: checkout-api is burning its latency budget 6x too fast
+      description: '{{ $value | humanizePercentage }} of requests have exceeded 250ms
+        for hours.'
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md
+  - alert: CheckoutAPILatencyBudgetLeak
+    expr: 'slo:latency_errors:ratio_rate1d{slo="checkout-api-latency"} > (3 * 0.01)
+
+      and
+
+      slo:latency_errors:ratio_rate2h{slo="checkout-api-latency"} > (3 * 0.01)
+
+      '
+    for: 1h
+    labels:
+      severity: ticket
+      slo: checkout-api-latency
+    annotations:
+      summary: checkout-api latency budget is leaking (3x burn)
+      description: Sustained slowness over a day at {{ $value | humanizePercentage
+        }} of requests over 250ms.
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md
+- name: slo.checkout-api.meta
+  rules:
+  - alert: CheckoutAPISLIMissing
+    expr: absent(slo:availability_errors:ratio_rate5m{slo="checkout-api-availability"})
+    for: 10m
+    labels:
+      severity: page
+      slo: checkout-api-availability
+    annotations:
+      summary: 'No SLI data for checkout-api: the SLOs are unmeasured, not met'
+      description: The availability SLI has produced no samples for 10 minutes. Check
+        that ingress-nginx is exporting metrics, that its ServiceMonitor is still
+        selected by Prometheus, and that the Ingress is still named slo-demo.
+      runbook_url: https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md

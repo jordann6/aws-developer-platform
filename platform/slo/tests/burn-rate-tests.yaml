@@ -1,0 +1,146 @@
+# Unit tests for the SLI recording rules and the burn-rate alerts.
+#
+# Alerting rules are code, and untested alerting rules fail in the worst
+# possible way: silently, during the incident they were written for. These feed
+# synthetic ingress metrics through the real rule files and assert on what
+# fires.
+#
+# This directory sits outside platform/slo/rules on purpose. The slo-rules
+# ArgoCD Application recurses that path and would try to apply this file to the
+# cluster as a manifest.
+#
+# Run:
+#   promtool test rules platform/slo/tests/burn-rate-tests.yaml
+#
+# The rule files are PrometheusRule CRDs, so promtool needs their .spec. See
+# scripts/slo-test.sh, which extracts and runs in one step.
+rule_files:
+  - ../../../.slo-test/rec.rules.yaml
+  - ../../../.slo-test/alerts.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # 10% of requests failing: a 20x burn against a 0.005 budget. Both the 1h and
+  # the 5m window are well past the 14.4x threshold, so this pages.
+  - interval: 1m
+    input_series:
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="200"}'
+        values: "0+540x120"
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="503"}'
+        values: "0+60x120"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: checkout-api-availability
+            exp_annotations:
+              summary: "checkout-api is burning its availability budget 14.4x too fast"
+              description: "10% of requests are failing. At this rate the 30-day error budget is gone in about 2 days, and 2% of it is already spent."
+              runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+      # The same error rate also trips the slower windows. Alertmanager groups
+      # them; the point of the assertion is that a real outage is not visible
+      # to the fast-burn rule alone.
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilitySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: checkout-api-availability
+            exp_annotations:
+              summary: "checkout-api is burning its availability budget 6x too fast"
+              description: "10% of requests have been failing for hours. Roughly 5% of the 30-day budget is spent."
+              runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
+
+  # A 0.4% error rate: under the 0.5% budget, so it is not burning the budget
+  # down at all. A naive "alert if errors > 0" or a 0.1% static threshold would
+  # page here. Nothing should.
+  - interval: 1m
+    input_series:
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="200"}'
+        values: "0+598x120"
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="503"}'
+        values: "0+2x120"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilitySlowBurn
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilityBudgetLeak
+        exp_alerts: []
+
+  # A perfectly healthy service: the 5xx series does not exist at all. Without
+  # `or on() vector(0)` in the recording rules this evaluates to empty rather
+  # than to zero, and the dashboard shows a gap where 100% should be.
+  - interval: 1m
+    input_series:
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="200"}'
+        values: "0+600x120"
+    promql_expr_test:
+      - expr: slo:availability_errors:ratio_rate5m
+        eval_time: 70m
+        exp_samples:
+          - labels: 'slo:availability_errors:ratio_rate5m{slo="checkout-api-availability"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: CheckoutAPISLIMissing
+        exp_alerts: []
+
+  # 20% of requests slower than 250ms, but every one of them returned 200. The
+  # latency SLO pages and the availability SLO stays silent. This is the case
+  # that justifies maintaining two SLIs instead of one.
+  - interval: 1m
+    input_series:
+      - series: 'nginx_ingress_controller_requests{ingress="slo-demo",status="200"}'
+        values: "0+600x120"
+      - series: 'nginx_ingress_controller_request_duration_seconds_count{ingress="slo-demo"}'
+        values: "0+600x120"
+      - series: 'nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="0.25"}'
+        values: "0+480x120"
+      - series: 'nginx_ingress_controller_request_duration_seconds_bucket{ingress="slo-demo",le="+Inf"}'
+        values: "0+600x120"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: CheckoutAPILatencyFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: checkout-api-latency
+            exp_annotations:
+              summary: "checkout-api is burning its latency budget 14.4x too fast"
+              description: "20% of requests are slower than the 250ms objective. The service is up, so availability alerts will stay silent."
+              runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-latency.md"
+      - eval_time: 70m
+        alertname: CheckoutAPIAvailabilityFastBurn
+        exp_alerts: []
+
+  # No metrics at all. Every burn-rate expression goes empty, so every burn
+  # alert stays silent: a broken exporter is indistinguishable from a healthy
+  # service unless something watches for the absence itself.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="ingress-nginx-controller-metrics"}'
+        values: "0x120"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CheckoutAPIAvailabilityFastBurn
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CheckoutAPISLIMissing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: checkout-api-availability
+            exp_annotations:
+              summary: "No SLI data for checkout-api: the SLOs are unmeasured, not met"
+              description: "The availability SLI has produced no samples for 10 minutes. Check that ingress-nginx is exporting metrics, that its ServiceMonitor is still selected by Prometheus, and that the Ingress is still named slo-demo."
+              runbook_url: "https://github.com/jordann6/aws-developer-platform/blob/main/docs/runbooks/checkout-api-availability.md"
