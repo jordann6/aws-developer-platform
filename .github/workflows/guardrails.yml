@@ -5,8 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+# tf-plan.yml declares id-token: write and pull-requests: write. A reusable
+# workflow cannot request permissions the caller has not granted, and GitHub
+# resolves `uses:` before it evaluates the job's `if:`, so gating the plan job
+# off does not avoid the check. Without these two lines every push fails at
+# startup with no logs and no jobs.
 permissions:
   contents: read
+  id-token: write
+  pull-requests: write
 
 jobs:
   static:
