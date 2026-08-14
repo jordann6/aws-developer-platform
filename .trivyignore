@@ -25,5 +25,30 @@
 # monthly cost, not a cleanup, so this is an accepted exception until then.
 #
 # Re-check when the eks module is next upgraded: if egress_all becomes
-# independently configurable, delete this file.
+# independently configurable, delete this entry.
 AVD-AWS-0104
+
+# AWS-0040 — "Public cluster access is enabled."
+# AWS-0041 — "Cluster allows access from a public CIDR."
+#
+# These two are our own choice, not an upstream default: eks.tf sets
+# cluster_endpoint_public_access = true so the cluster can be driven with
+# kubectl and helm from a workstation during a demo.
+#
+# Neither is clearable by configuration. Verified against Trivy directly:
+# with cluster_endpoint_public_access_cidrs narrowed to a single /32, AWS-0041
+# still fires and only changes its message to name that /32, because the check
+# flags any public CIDR rather than a wide one. AWS-0040 fires on the public
+# endpoint existing at all. The only configuration that satisfies both is a
+# private-only endpoint.
+#
+# What was actually done about the risk: the access list is now
+# var.cluster_public_access_cidrs instead of the module default of 0.0.0.0/0,
+# so a run can be scoped to one address without editing Terraform. The default
+# is still 0.0.0.0/0 for demo convenience, so on a default apply this is a knob
+# rather than a mitigation. The endpoint requires IAM auth in every case.
+#
+# The real fix is a private endpoint reached over SSM port-forwarding, which
+# clears both. Worth doing if this cluster ever outlives a demo.
+AVD-AWS-0040
+AVD-AWS-0041

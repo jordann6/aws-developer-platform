@@ -16,6 +16,19 @@ variable "cluster_name" {
   default     = "adp-dev"
 }
 
+variable "cluster_public_access_cidrs" {
+  description = <<-EOT
+    CIDRs allowed to reach the public EKS API endpoint. The module default is
+    0.0.0.0/0, which puts the control plane endpoint in front of the whole
+    internet. It is still IAM-authenticated, but pass your workstation /32 here
+    for any run that is not a throwaway demo:
+
+      terraform apply -var='cluster_public_access_cidrs=["$(curl -s ifconfig.me)/32"]'
+  EOT
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "cluster_version" {
   description = "EKS Kubernetes version."
   type        = string

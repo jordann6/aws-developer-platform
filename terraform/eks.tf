@@ -5,8 +5,13 @@ module "eks" {
   cluster_name    = local.name
   cluster_version = var.cluster_version
 
-  # Public endpoint so we can drive kubectl/helm from a workstation
-  cluster_endpoint_public_access = true
+  # Public endpoint so we can drive kubectl/helm from a workstation. The access
+  # list is a variable rather than the module default of 0.0.0.0/0, so a real
+  # run can be scoped to one address. Trivy still flags this either way: its
+  # checks fire on a public endpoint existing at all and on any public CIDR
+  # reaching it, a /32 included. See .trivyignore.
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_public_access_cidrs = var.cluster_public_access_cidrs
 
   # Grant the Terraform caller cluster-admin so bootstrap works without aws-auth juggling
   enable_cluster_creator_admin_permissions = true
