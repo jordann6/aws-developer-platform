@@ -20,11 +20,15 @@ terraform {
 provider "aws" {
   region = var.region
 
+  # Keys are PascalCase deliberately. AWS treats "Owner" and "owner" as two
+  # distinct tags, so mixing the two casings splits a cost allocation report
+  # into groups that never add up. These must stay identical to local.tags.
   default_tags {
     tags = {
-      project    = "aws-developer-platform"
-      owner      = "jordann6"
-      managed_by = "terraform"
+      Project     = "aws-developer-platform"
+      Environment = var.environment
+      Owner       = "jordann6"
+      ManagedBy   = "terraform"
     }
   }
 }

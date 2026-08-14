@@ -4,6 +4,12 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "environment" {
+  description = "Deployment environment. Tagged onto every resource for cost allocation."
+  type        = string
+  default     = "dev"
+}
+
 variable "cluster_name" {
   description = "EKS cluster name."
   type        = string

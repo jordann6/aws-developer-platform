@@ -6,10 +6,13 @@ locals {
   name = var.cluster_name
   azs  = slice(data.aws_availability_zones.available.names, 0, 2)
 
+  # Must match the provider default_tags casing exactly. If these drift, every
+  # resource created through a module call gets both "Project" and "project".
   tags = {
-    project    = "aws-developer-platform"
-    owner      = "jordann6"
-    managed_by = "terraform"
+    Project     = "aws-developer-platform"
+    Environment = var.environment
+    Owner       = "jordann6"
+    ManagedBy   = "terraform"
   }
 }
 
