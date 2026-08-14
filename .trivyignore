@@ -1,0 +1,29 @@
+# AWS-0104 — "A security group rule should not allow unrestricted egress to
+# any IP address." (aka AVD-AWS-0104, no-public-egress-sgr)
+#
+# Not our code. The finding is the `egress_all` rule at node_groups.tf:175 of
+# terraform-aws-modules/eks/aws, which Trivy reaches because a config scan
+# downloads remote modules even though this job never runs `terraform init`.
+#
+# Why it is not simply switched off: that rule sits inside
+# local.node_security_group_recommended_rules, gated by the module's
+# node_security_group_enable_recommended_rules (default true). The same flag
+# also controls the cluster-to-node webhook ingress on 4443/6443/8443/9443 that
+# metrics-server, prometheus-adapter, the ALB controller and Karpenter rely on.
+# The ungated rule set next to it is ingress-only, so disabling the flag leaves
+# the node security group with no egress at all and nodes cannot reach the EKS
+# API or pull from ECR.
+#
+# Why a narrower rule would not clear it either: the check keys on the /0
+# destination, not the port range. Verified against Trivy directly — an egress
+# rule scoped to tcp/443 with cidr 0.0.0.0/0 still fires; the same rule scoped
+# to 10.0.0.0/16 does not.
+#
+# The real fix is interface endpoints for ECR API, ECR DKR, STS, EKS and
+# CloudWatch Logs plus an S3 gateway endpoint, then egress restricted to the VPC
+# CIDR and prefix lists. That is a deliberate piece of work with a standing
+# monthly cost, not a cleanup, so this is an accepted exception until then.
+#
+# Re-check when the eks module is next upgraded: if egress_all becomes
+# independently configurable, delete this file.
+AVD-AWS-0104
