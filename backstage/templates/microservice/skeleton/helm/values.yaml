@@ -1,8 +1,10 @@
 replicaCount: 2
 
 image:
+  # Pin a real tag or digest before shipping. The platform's disallow-latest-tag
+  # admission policy will reject :latest in an enforced namespace.
   repository: REPLACE_WITH_YOUR_REGISTRY/${{ values.name }}
-  tag: latest
+  tag: "0.1.0"
   pullPolicy: IfNotPresent
 
 service:
@@ -10,3 +12,17 @@ service:
   targetPort: 8080
 
 team: ${{ values.owner }}
+# Chargeback key. Applied as app.kubernetes.io/cost-center so the platform's
+# require-cost-center-label admission policy is satisfied and the service's spend
+# is attributable from its first deploy.
+costCenter: ${{ values.costCenter }}
+
+# Resource ceilings are required by the platform's require-resource-limits
+# policy. Sized as a safe starting point; tune to the service's real profile.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi

@@ -48,14 +48,28 @@ spec:
               group_by: ["alertname", "slo"]
               receiver: "null"
               routes:
-                # Fast burn is the only thing that would wake a human. Slow burn
-                # and ticket-severity alerts ride the default route.
+                # Page-severity burn (fast/slow) is routed to the incident
+                # responder rather than swallowed. This is the same loop as the
+                # aws-incident-responder project: an alert becomes a runbook run
+                # with a Claude-generated summary and a Slack verify/escalate
+                # step, with a human kept in the escalation path. The webhook URL
+                # is the bridge to that responder; override it per environment.
                 - matchers: ["severity = page"]
-                  receiver: "null"
+                  receiver: "incident-responder"
                   group_wait: 30s
                   repeat_interval: 1h
+                # Ticket-severity (slow leak) rides the default route.
             receivers:
               - name: "null"
+              - name: "incident-responder"
+                webhook_configs:
+                  # Points at the responder's ingest webhook. Left as an
+                  # in-cluster placeholder so a fresh deploy does not page a real
+                  # endpoint; set this to the aws-incident-responder URL (or an
+                  # Alertmanager-to-Slack bridge) to arm it. send_resolved so the
+                  # responder also learns when the burn stops.
+                  - url: "http://incident-responder.incident-response.svc.cluster.local/alert"
+                    send_resolved: true
         grafana:
           defaultDashboardsTimezone: browser
           # Demo credentials, reachable only through `kubectl port-forward`.

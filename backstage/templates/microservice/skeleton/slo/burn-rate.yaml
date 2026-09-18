@@ -1,0 +1,50 @@
+# Starter SLO burn-rate alerts for ${{ values.name }}, shipped with the service
+# so it is observable on day one instead of "we will add monitoring later".
+#
+# This assumes an availability SLI recording rule named
+# slo:availability_errors:ratio_rate<window>{slo="${{ values.name }}-availability"}
+# exists (see platform/slo/rules in the platform repo for the reference set to
+# copy). Objective: 99.5% non-5xx over 30 days, so the error budget is 0.005.
+#
+# Multi-window, multi-burn-rate (Google SRE Workbook ch.5): a long window asks
+# "is this real?" and a short window asks "is it still happening?". Page alerts
+# route to the platform incident responder; see RUNBOOK.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ${{ values.name }}-slo-burn-rate
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    slo-service: ${{ values.name }}
+spec:
+  groups:
+    - name: slo.${{ values.name }}.availability.burn
+      rules:
+        - alert: ${{ values.name }}AvailabilityFastBurn
+          expr: |
+            slo:availability_errors:ratio_rate1h{slo="${{ values.name }}-availability"} > (14.4 * 0.005)
+            and
+            slo:availability_errors:ratio_rate5m{slo="${{ values.name }}-availability"} > (14.4 * 0.005)
+          for: 2m
+          labels:
+            severity: page
+            slo: ${{ values.name }}-availability
+          annotations:
+            summary: "${{ values.name }} is burning its availability budget 14.4x too fast"
+            description: "{{ $value | humanizePercentage }} of requests failing; 2% of the 30-day budget gone in the first hour."
+            runbook_url: "./RUNBOOK.md"
+
+        - alert: ${{ values.name }}AvailabilitySlowBurn
+          expr: |
+            slo:availability_errors:ratio_rate6h{slo="${{ values.name }}-availability"} > (6 * 0.005)
+            and
+            slo:availability_errors:ratio_rate30m{slo="${{ values.name }}-availability"} > (6 * 0.005)
+          for: 15m
+          labels:
+            severity: page
+            slo: ${{ values.name }}-availability
+          annotations:
+            summary: "${{ values.name }} is burning its availability budget 6x too fast"
+            description: "{{ $value | humanizePercentage }} of requests have been failing for hours; ~5% of the budget spent."
+            runbook_url: "./RUNBOOK.md"

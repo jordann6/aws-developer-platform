@@ -1,0 +1,52 @@
+# Supply-chain integrity: verify that images are signed (cosign / Sigstore)
+# before they run. This is the runtime end of the same chain the supply-chain
+# security work covers at build time (KMS-signed artifacts + provenance): sign
+# on the way out, verify on the way in.
+#
+# Compliance: SOC 2 CC8 change integrity and GxP / 21 CFR Part 11 (only known,
+# attested software runs in a validated environment), and it maps to SLSA
+# provenance expectations.
+#
+# failureAction is Audit on purpose, not Enforce. Flipping straight to Enforce
+# would block every unsigned upstream image (Prometheus, ArgoCD, Backstage) and
+# brick the platform. Audit reports violations to the Kyverno policy report so
+# the gap is visible now; the honest rollout is warn -> socialize -> enforce per
+# namespace once teams are publishing signed images. Naming that trade-off is
+# the point, not hiding it.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/category: Supply Chain Security
+spec:
+  background: false
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: verify-signed-with-cosign-keyless
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      verifyImages:
+        - imageReferences:
+            # Only gate images from this platform's own registry namespace.
+            # Upstream public images are out of scope until they are mirrored
+            # and re-signed, which keeps the audit signal honest.
+            - "ghcr.io/jordann6/*"
+          failureAction: Audit
+          attestors:
+            - entries:
+                - keyless:
+                    # Keyless (Fulcio/Rekor): the signer's OIDC identity is the
+                    # trust anchor instead of a long-lived key we would have to
+                    # rotate and guard.
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/jordann6/*"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"

@@ -52,6 +52,8 @@ data "aws_iam_policy_document" "crossplane_s3" {
       "s3:PutBucketPublicAccessBlock",
       "s3:GetBucketAcl",
       "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
       "s3:GetBucketLocation",
       "s3:GetAccelerateConfiguration",
       "s3:GetBucketCors",
@@ -73,4 +75,36 @@ resource "aws_iam_role_policy" "crossplane_s3" {
   name   = "s3-management"
   role   = aws_iam_role.crossplane_s3.id
   policy = data.aws_iam_policy_document.crossplane_s3.json
+}
+
+# KMS actions for the customer-managed key each self-service bucket owns
+# (SSE-KMS + rotation). CreateKey cannot be scoped to a key that does not exist
+# yet, so the management actions are resource "*"; the key policy created with
+# each key is what actually bounds who can use it. Scoped to KMS management only,
+# not data-plane crypto, which the bucket/key policies govern at use time.
+data "aws_iam_policy_document" "crossplane_kms" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:CreateKey",
+      "kms:ScheduleKeyDeletion",
+      "kms:DescribeKey",
+      "kms:EnableKeyRotation",
+      "kms:DisableKeyRotation",
+      "kms:GetKeyRotationStatus",
+      "kms:GetKeyPolicy",
+      "kms:PutKeyPolicy",
+      "kms:ListKeys",
+      "kms:ListResourceTags",
+      "kms:TagResource",
+      "kms:UntagResource"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "crossplane_kms" {
+  name   = "kms-management"
+  role   = aws_iam_role.crossplane_s3.id
+  policy = data.aws_iam_policy_document.crossplane_kms.json
 }

@@ -16,6 +16,22 @@ variable "cluster_name" {
   default     = "adp-dev"
 }
 
+variable "cost_center" {
+  description = <<-EOT
+    Chargeback cost centre code, stamped on every resource via default_tags so
+    all platform spend bills back to one budget line. Pinned to the house format
+    the shared FinOps gate enforces; a free-text value would split the
+    allocation report into synonyms that never add up.
+  EOT
+  type        = string
+  default     = "cc-1001"
+
+  validation {
+    condition     = can(regex("^cc-[0-9]{4}$", var.cost_center))
+    error_message = "cost_center must match the house format cc-NNNN (e.g. cc-1001)."
+  }
+}
+
 variable "cluster_public_access_cidrs" {
   description = <<-EOT
     CIDRs allowed to reach the public EKS API endpoint. The module default is

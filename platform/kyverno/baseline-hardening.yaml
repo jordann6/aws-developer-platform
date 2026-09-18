@@ -1,0 +1,99 @@
+# Baseline workload hardening enforced at admission. These are the controls a
+# regulated shop expects to be un-skippable rather than left to each team's
+# chart: a container that runs as root, mutates its own image, has no resource
+# ceiling, or floats on the :latest tag is a finding waiting to happen.
+#
+# Compliance mapping:
+#   run-as-non-root / no-privilege-escalation  -> CIS Kubernetes, SOC 2 CC6
+#                                                  (least privilege at runtime)
+#   require-resource-limits                     -> availability / noisy-neighbour
+#                                                  and DoS protection, SOC 2 CC7
+#   disallow-latest-tag                         -> change control and rollback:
+#                                                  a mutable tag means "what is
+#                                                  running" is not provable, which
+#                                                  breaks SOC 2 CC8 / GxP.
+#
+# Scoped to namespaces labeled team-policy=enforce so the platform's own
+# components (some upstream charts do run as root or omit limits) are untouched.
+# This is the runtime cousin of the flagship's plan-time conftest gate: same
+# philosophy, admission control instead of CI.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: baseline-hardening
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/category: Pod Security, Best Practices
+spec:
+  background: true
+  rules:
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: "Containers must run as non-root (securityContext.runAsNonRoot=true)."
+        pattern:
+          spec:
+            =(securityContext):
+              =(runAsNonRoot): "true"
+            containers:
+              - =(securityContext):
+                  =(runAsNonRoot): "true"
+
+    - name: disallow-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: "allowPrivilegeEscalation must be set to false on every container."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: "false"
+
+    - name: require-resource-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: "Every container must set CPU and memory resource limits."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: "Images must be pinned to a specific tag or digest, not :latest."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

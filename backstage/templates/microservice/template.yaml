@@ -38,6 +38,12 @@ spec:
           title: Description
           type: string
           description: What does this service do?
+        costCenter:
+          title: Cost centre
+          type: string
+          description: Chargeback code (cc-NNNN). Stamped as a label so the service's spend is billable from day one.
+          default: cc-1001
+          pattern: "^cc-[0-9]{4}$"
     - title: Repository
       required:
         - repoUrl
@@ -60,6 +66,7 @@ spec:
           name: ${{ parameters.name }}
           owner: ${{ parameters.owner }}
           description: ${{ parameters.description }}
+          costCenter: ${{ parameters.costCenter }}
 
     - id: publish
       name: Publish to GitHub

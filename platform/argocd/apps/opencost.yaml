@@ -1,0 +1,64 @@
+# OpenCost: per-namespace / per-workload cost, scraped from the same Prometheus
+# the SLOs run against. This is the in-cluster half of the FinOps story, the
+# Kubernetes-native cousin of the cost-intelligence dashboard: the dashboard
+# attributes AWS + LLM spend by tag, OpenCost attributes cluster spend by
+# namespace, workload, and the cost-center label the Kyverno gate requires. Same
+# attribution key, from the node down to the pod.
+#
+# Wave 3: after kube-prometheus-stack (wave 2) so its Prometheus endpoint exists.
+# Storage is ephemeral by design (deploy/demo/destroy platform), and resource
+# limits are set so OpenCost itself obeys the ceilings the platform enforces.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opencost
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://opencost.github.io/opencost-helm-chart
+    chart: opencost
+    targetRevision: 1.43.0
+    helm:
+      values: |
+        opencost:
+          prometheus:
+            internal:
+              enabled: true
+              serviceName: kube-prometheus-stack-prometheus
+              namespaceName: monitoring
+              port: 9090
+          exporter:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                cpu: 250m
+                memory: 256Mi
+          ui:
+            enabled: true
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opencost
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

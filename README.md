@@ -12,8 +12,9 @@ An Internal Developer Platform on EKS that gives application teams a paved road:
 |---|---|---|
 | Cluster substrate | **EKS** (Terraform) | VPC, managed node group, OIDC/IRSA, provisioned as code |
 | GitOps | **ArgoCD** (app-of-apps) | Reconciles every platform component from this repo |
-| Self-service infra | **Crossplane** + AWS provider | A `Bucket` claim provisions a real, hardened S3 bucket |
-| Guardrails | **Kyverno** | Policy-as-code admission control |
+| Self-service infra | **Crossplane** + AWS provider | A `Bucket` claim provisions a real, hardened S3 bucket (SSE-KMS + TLS-only) |
+| Guardrails | **Kyverno** | Policy-as-code admission control: attribution, hardening, image signing |
+| FinOps | **finops.rego gate** + **OpenCost** | CostCenter enforced in CI and at admission; cluster spend attributed by the same key |
 | Developer portal | **Backstage** | Catalog plus a golden-path microservice template |
 
 ## The self-service flow
@@ -30,14 +31,16 @@ spec:
   parameters:
     region: us-east-1
     team: payments
+    costCenter: cc-1001
 ```
 
-Crossplane composes that into a real S3 bucket that is **hardened by default**, with no way for the developer to opt out:
+Crossplane composes that into a real S3 bucket that is **hardened by default**, with no way for the developer to opt out. The control set is deliberately identical to the [`governed-data-pipeline`](https://github.com/jordann6/governed-data-pipeline) Terraform module's S3 zones, so a bucket born from a one-line claim carries the same guarantees as one from the audited pipeline:
 
-- AES256 encryption
-- Versioning enabled
+- **SSE-KMS** with a customer-managed key (rotation on), not SSE-S3
+- **TLS-only** bucket policy (deny `aws:SecureTransport=false`)
 - All four public-access-block settings on
-- Owning-team tag applied
+- Versioning enabled
+- Owning-team and **CostCenter** tags applied
 
 Crossplane authenticates to AWS via **IRSA** (the provider pod assumes an IAM role through its projected ServiceAccount token), so there are no static credentials anywhere in the platform.
 
@@ -45,8 +48,10 @@ Crossplane authenticates to AWS via **IRSA** (the provider pod assumes an IAM ro
 
 - **App-of-apps:** `platform/argocd/root-app.yaml` points ArgoCD at `platform/argocd/apps`, which declares one `Application` per component. Sync waves order the install (control planes first, then their configuration).
 - **Crossplane:** `platform/crossplane/` holds the AWS provider (with an IRSA `DeploymentRuntimeConfig`), the `ProviderConfig`, and the `XRD` + `Composition` that define the `Bucket` API.
-- **Kyverno:** `platform/kyverno/require-team-label.yaml` enforces an owning-team label on pods in namespaces labeled `team-policy=enforce`, scoped by namespace selector so platform and system namespaces are untouched.
-- **Backstage:** `backstage/` is a real scaffolded app. The golden-path template at `backstage/templates/microservice/` produces a new service complete with a Dockerfile, a hardened Helm chart, and an ArgoCD `Application`, so a new service is GitOps-deployable on this platform the moment it is created.
+- **Kyverno:** `platform/kyverno/` enforces, in namespaces labeled `team-policy=enforce`, an owning-team label, a `cost-center` label (the admission-time twin of the CI FinOps gate), and a baseline-hardening set (non-root, no privilege escalation, resource limits, no `:latest`). It also audits image signatures (cosign keyless) as the runtime end of the supply-chain signing story. All scoped by namespace selector so platform namespaces are untouched.
+- **FinOps gate:** `.github/workflows/guardrails.yml` calls the shared `platform-guardrails` pipeline. `finops.rego` fails a PR whose Terraform is missing or placeholders the `CostCenter` allocation tag, and an Infracost job fails a PR that raises projected spend past $50/mo without a `cost-approved` label. `OpenCost` (`platform/argocd/apps/opencost.yaml`) then attributes running cluster spend by the same key.
+- **Incident response:** page-severity SLO burn-rate alerts route to an incident responder (Claude summary + Slack verify/escalate, human in the loop) rather than a null receiver. See `docs/runbooks/incident-auto-response.md`.
+- **Backstage:** `backstage/` is a real scaffolded app. The golden-path template at `backstage/templates/microservice/` produces a new service born compliant: a Dockerfile, a hardened Helm chart (cost-center label, resource limits, pinned image tag), a burn-rate SLO, a runbook, and an ArgoCD `Application`, so a new service is GitOps-deployable and governed the moment it exists.
 
 ## Deploy
 
@@ -87,11 +92,18 @@ kubectl delete bucket.platform.jordann6.io/demo-bucket -n team-apps
 
 ```bash
 kubectl create namespace demo && kubectl label namespace demo team-policy=enforce
-# Denied: no team label
+
+# Denied: an enforced namespace requires a team label, a cost-center label,
+# resource limits, a non-root securityContext, and a pinned (non-:latest) image.
 kubectl run nginx --image=nginx -n demo
-# Allowed: team label present
-kubectl run nginx --image=nginx -n demo --labels=app.kubernetes.io/team=payments
+
+# Allowed: a pod that satisfies every policy (labels + hardening + limits).
+kubectl apply -n demo -f examples/compliant-pod.yaml
 ```
+
+The bare `kubectl run` trips several policies at once, which is the point: the
+attribution and hardening controls are un-skippable in an enforced namespace. See
+`kubectl get cpol` and `kubectl describe cpol <name>` for the full set.
 
 ## Teardown
 
@@ -105,13 +117,32 @@ Order matters: Crossplane-managed resources live outside the cluster, so claims 
 
 ## Cost
 
-The only meaningful cost is the EKS cluster while it runs: control plane (~$0.10/hr) plus two `t3.large` nodes and a single NAT gateway, roughly $0.40 to $0.60/hr. This is a spin-up, demo, tear-down environment.
+The only meaningful cost is the EKS cluster while it runs: control plane (~$0.10/hr) plus two `t3.large` nodes and a single NAT gateway, roughly $0.40 to $0.60/hr. This is a spin-up, demo, tear-down environment. OpenCost and the added guardrails run inside the existing node group and add nothing. Each self-service bucket now owns a customer-managed KMS key (~$1/mo prorated while it exists, plus per-request charges); deleting the claim deletes the key, so a demo run adds cents.
+
+## Compliance mapping
+
+The platform's controls, and the audit expectations they answer, are the same story as the [`governed-data-pipeline`](https://github.com/jordann6/governed-data-pipeline) flagship, expressed here through Kubernetes admission and a Crossplane API instead of a Terraform module and a CI gate.
+
+| Control | Implementation | Satisfies |
+|---|---|---|
+| Cost attribution | `CostCenter` in `default_tags`, `finops.rego` gate; `cost-center` label at admission | FinOps chargeback, SOC 2 accountability |
+| Cost ceiling | Infracost per-PR threshold ($50/mo), `cost-approved` override | preventive FinOps |
+| Cost visibility | OpenCost, attributed by namespace / workload / cost-center | detective FinOps, ongoing ownership |
+| Encrypt at rest | Crossplane CMK + SSE-KMS, rotation on | SOC 2 CC6.1, ISO 27001 crypto |
+| Encrypt in transit | TLS-only bucket policy (`DenyInsecureTransport`) | SOC 2 CC6.7 |
+| No public data | public-access-block, all four, every bucket | SOC 2 CC6, confidentiality |
+| Least privilege | IRSA (no static creds), scoped IAM per workload | SOC 2 CC6.3 |
+| Runtime hardening | Kyverno: non-root, no priv-esc, limits, no `:latest` | CIS Kubernetes, SOC 2 CC6/CC7 |
+| Supply-chain integrity | Kyverno cosign image verification (Audit) | SOC 2 CC8, SLSA provenance |
+| Change control | GitOps: Git is the source of truth, ArgoCD reconciles | SOC 2 CC8.1, GxP / 21 CFR Part 11 |
+| Incident response | burn-rate pages routed to responder, human in the loop | operational resilience, SOC 2 CC7 |
 
 ## Tech Stack
 
 - **Terraform** `>= 1.6` with `terraform-aws-modules/eks` and `vpc`, S3 state backend
 - **Amazon EKS** v1.33, managed node group, IRSA/OIDC
 - **ArgoCD** app-of-apps GitOps
-- **Crossplane** 1.20 with the Upbound AWS S3 provider, IRSA auth, XRD + Composition
-- **Kyverno** 1.13 policy-as-code
-- **Backstage** scaffolder golden-path template
+- **Crossplane** 1.20 with the Upbound AWS S3 + KMS providers, IRSA auth, XRD + Composition
+- **Kyverno** 1.13 policy-as-code: attribution, baseline hardening, cosign image verification
+- **FinOps** shared `finops.rego` + Infracost gate (via `platform-guardrails`), **OpenCost** for cluster cost attribution
+- **Backstage** scaffolder golden-path template (born compliant: labels, limits, SLO, runbook)

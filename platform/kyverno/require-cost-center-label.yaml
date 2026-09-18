@@ -1,0 +1,42 @@
+# Guardrail: the admission-time twin of the Terraform FinOps gate. The CI gate
+# (finops.rego) proves every Terraform resource carries a CostCenter tag; this
+# proves every workload carries the same allocation key inside the cluster, so a
+# pod scheduled by hand or by a chart that skipped CI still bills back to a
+# budget line. Same attribution key, enforced on both sides of the wall.
+#
+# Compliance: FinOps chargeback/showback, and SOC 2 CC-series accountability
+# (every running workload is attributable to an owner and a cost centre).
+#
+# Scoped by namespaceSelector so platform and system namespaces are untouched,
+# same convention as require-team-label. The value is pinned to the house
+# cost-centre format (cc-NNNN) so codes cannot drift into unbillable synonyms.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-cost-center-label
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/category: FinOps
+spec:
+  background: true
+  rules:
+    - name: require-cost-center-on-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaceSelector:
+                matchLabels:
+                  team-policy: enforce
+      validate:
+        failureAction: Enforce
+        message: >-
+          Pods in enforced namespaces must set the 'app.kubernetes.io/cost-center'
+          label to a cost centre code (cc-NNNN) so their spend is billable. The
+          strict cc-NNNN format is enforced by the CI FinOps gate; admission
+          checks presence and the cc- prefix.
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/cost-center: "cc-?*"

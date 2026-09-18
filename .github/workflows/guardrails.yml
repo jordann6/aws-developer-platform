@@ -42,3 +42,21 @@ jobs:
       enable_infracost: false
     secrets:
       INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+  # FinOps gate. The allocation job (finops.rego via conftest) is credential-free
+  # and runs on every push and PR, failing the build on a missing or placeholder
+  # CostCenter tag before the resource exists. The cost job runs only on PRs: it
+  # needs an INFRACOST_API_KEY repo secret (free tier) and fails a PR that pushes
+  # projected spend past $50/mo unless a 'cost-approved' label is present. Without
+  # the secret the PR-only cost job is the only thing that fails, so the main-branch
+  # badge stays green while the allocation gate still enforces.
+  finops:
+    uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      terraform_dir: terraform
+      max_monthly_increase: "50"
+    secrets:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}

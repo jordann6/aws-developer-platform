@@ -26,3 +26,19 @@ spec:
   package: xpkg.upbound.io/upbound/provider-aws-s3:v1.21.0
   runtimeConfigRef:
     name: provider-aws-irsa
+---
+# KMS provider: the self-service bucket now owns a customer-managed key with
+# rotation (SSE-KMS), so the composition creates a kms.aws.upbound.io Key. Same
+# IRSA runtime config, so it assumes the same role (which now carries the KMS
+# management actions from iam-irsa.tf). The family provider is a shared
+# dependency both S3 and KMS pull in automatically.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kms
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kms:v1.21.0
+  runtimeConfigRef:
+    name: provider-aws-irsa

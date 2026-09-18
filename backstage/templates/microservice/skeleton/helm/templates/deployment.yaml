@@ -5,6 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/team: {{ .Values.team }}
+    app.kubernetes.io/cost-center: {{ .Values.costCenter }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,6 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .Chart.Name }}
         app.kubernetes.io/team: {{ .Values.team }}
+        app.kubernetes.io/cost-center: {{ .Values.costCenter }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -24,6 +26,13 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
           readinessProbe:
             httpGet:
               path: /healthz

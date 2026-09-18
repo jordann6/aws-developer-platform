@@ -13,6 +13,7 @@ locals {
     Environment = var.environment
     Owner       = "jordann6"
     ManagedBy   = "terraform"
+    CostCenter  = var.cost_center
   }
 }
 

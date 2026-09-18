@@ -1,6 +1,17 @@
-# Composition for XBucket: every self-service bucket is hardened by default with
-# public access fully blocked, AES256 encryption, and versioning enabled. The
-# developer cannot opt out, which is the point of a paved road.
+# Composition for XBucket: every self-service bucket is hardened by default and
+# the developer cannot opt out, which is the point of a paved road. The control
+# set is deliberately identical to the flagship governed-data-pipeline's S3
+# zones, so a bucket born from a one-line claim carries the same guarantees as
+# one provisioned by the audited Terraform module:
+#
+#   - customer-managed KMS key (CMK) with rotation, SSE-KMS on the bucket
+#     -> SOC 2 CC6.1, ISO 27001 crypto, an auditable key we own and rotate
+#   - TLS-only bucket policy (deny aws:SecureTransport=false)
+#     -> SOC 2 CC6.7, encryption in transit
+#   - public access fully blocked (all four settings)
+#     -> SOC 2 CC6, data confidentiality
+#   - versioning enabled                          -> recoverability
+#   - CostCenter tag                              -> FinOps chargeback
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -20,6 +31,30 @@ spec:
         apiVersion: pt.fn.crossplane.io/v1beta1
         kind: Resources
         resources:
+          # Customer-managed key, one per bucket, rotation on. Owning the key
+          # (not the S3-managed default) is what gives us key policy control and
+          # an audit trail of decrypt calls, the reason a regulated shop uses a
+          # CMK over SSE-S3.
+          - name: kms-key
+            base:
+              apiVersion: kms.aws.upbound.io/v1beta1
+              kind: Key
+              spec:
+                forProvider:
+                  region: us-east-1
+                  description: "CMK for self-service bucket (aws-developer-platform)"
+                  enableKeyRotation: true
+                  deletionWindowInDays: 7
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - fromFieldPath: spec.parameters.team
+                toFieldPath: spec.forProvider.tags.team
+              - fromFieldPath: spec.parameters.costCenter
+                toFieldPath: spec.forProvider.tags[CostCenter]
+
           - name: bucket
             base:
               apiVersion: s3.aws.upbound.io/v1beta1
@@ -34,9 +69,12 @@ spec:
                 toFieldPath: spec.forProvider.region
               - fromFieldPath: spec.parameters.team
                 toFieldPath: spec.forProvider.tags.team
+              - fromFieldPath: spec.parameters.costCenter
+                toFieldPath: spec.forProvider.tags[CostCenter]
               - type: ToCompositeFieldPath
                 fromFieldPath: metadata.annotations[crossplane.io/external-name]
                 toFieldPath: status.bucketName
+
           - name: public-access-block
             base:
               apiVersion: s3.aws.upbound.io/v1beta1
@@ -53,6 +91,10 @@ spec:
             patches:
               - fromFieldPath: spec.parameters.region
                 toFieldPath: spec.forProvider.region
+
+          # SSE-KMS using the composed CMK above. matchControllerRef resolves to
+          # the one Key owned by this same composite, so encryption is wired to
+          # our key without the developer ever seeing an ARN.
           - name: encryption
             base:
               apiVersion: s3.aws.upbound.io/v1beta1
@@ -62,12 +104,16 @@ spec:
                   region: us-east-1
                   rule:
                     - applyServerSideEncryptionByDefault:
-                        - sseAlgorithm: AES256
+                        - sseAlgorithm: aws:kms
+                          kmsMasterKeyIdSelector:
+                            matchControllerRef: true
+                      bucketKeyEnabled: true
                   bucketSelector:
                     matchControllerRef: true
             patches:
               - fromFieldPath: spec.parameters.region
                 toFieldPath: spec.forProvider.region
+
           - name: versioning
             base:
               apiVersion: s3.aws.upbound.io/v1beta1
@@ -82,3 +128,32 @@ spec:
             patches:
               - fromFieldPath: spec.parameters.region
                 toFieldPath: spec.forProvider.region
+
+          # TLS-only: deny any request where aws:SecureTransport is false. The
+          # policy needs the bucket ARN, so the resource name is templated from
+          # status.bucketName (set above once the bucket exists). Until then the
+          # policy string is empty and this resource waits; Crossplane reconciles
+          # continuously, so it converges the moment the bucket name is known.
+          - name: tls-only-policy
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketPolicy
+              spec:
+                forProvider:
+                  region: us-east-1
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.bucketName
+                  strategy: string
+                  string:
+                    fmt: |
+                      {"Version":"2012-10-17","Statement":[{"Sid":"DenyInsecureTransport","Effect":"Deny","Principal":"*","Action":"s3:*","Resource":["arn:aws:s3:::%[1]s","arn:aws:s3:::%[1]s/*"],"Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}
+                toFieldPath: spec.forProvider.policy
+                policy:
+                  fromFieldPath: Required

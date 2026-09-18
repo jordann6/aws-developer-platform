@@ -35,6 +35,14 @@ spec:
                     team:
                       type: string
                       description: Owning team, applied as a tag.
+                    costCenter:
+                      type: string
+                      default: cc-1001
+                      pattern: "^cc-[0-9]{4}$"
+                      description: >-
+                        Chargeback cost centre code (cc-NNNN), applied as a tag so
+                        the bucket's spend is billable. Matches the house format
+                        the CI FinOps gate enforces on Terraform resources.
                   required:
                     - team
               required:
