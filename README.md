@@ -15,6 +15,7 @@ An Internal Developer Platform on EKS that gives application teams a paved road:
 | Self-service infra | **Crossplane** + AWS provider | A `Bucket` claim provisions a real, hardened S3 bucket (SSE-KMS + TLS-only) |
 | Guardrails | **Kyverno** | Policy-as-code admission control: attribution, hardening, image signing |
 | FinOps | **finops.rego gate** + **OpenCost** | CostCenter enforced in CI and at admission; cluster spend attributed by the same key |
+| Secret distribution | **External Secrets Operator** + Secrets Manager | Secrets synced from AWS Secrets Manager over IRSA; nothing plaintext in Git |
 | Developer portal | **Backstage** | Catalog plus a golden-path microservice template |
 
 ## The self-service flow
@@ -135,6 +136,7 @@ The platform's controls, and the audit expectations they answer, are the same st
 | Runtime hardening | Kyverno: non-root, no priv-esc, limits, no `:latest` | CIS Kubernetes, SOC 2 CC6/CC7 |
 | Supply-chain integrity | Kyverno cosign image verification (Audit) | SOC 2 CC8, SLSA provenance |
 | Change control | GitOps: Git is the source of truth, ArgoCD reconciles | SOC 2 CC8.1, GxP / 21 CFR Part 11 |
+| Secret distribution | ESO syncs from Secrets Manager over IRSA; no secrets in Git | SOC 2 CC6.1, secrets rotation + least privilege |
 | Incident response | burn-rate pages routed to responder, human in the loop | operational resilience, SOC 2 CC7 |
 
 ## Tech Stack
@@ -145,4 +147,5 @@ The platform's controls, and the audit expectations they answer, are the same st
 - **Crossplane** 1.20 with the Upbound AWS S3 + KMS providers, IRSA auth, XRD + Composition
 - **Kyverno** 1.13 policy-as-code: attribution, baseline hardening, cosign image verification
 - **FinOps** shared `finops.rego` + Infracost gate (via `platform-guardrails`), **OpenCost** for cluster cost attribution
+- **External Secrets Operator** 0.10 syncing AWS Secrets Manager over IRSA (ClusterSecretStore)
 - **Backstage** scaffolder golden-path template (born compliant: labels, limits, SLO, runbook)
