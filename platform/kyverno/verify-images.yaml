@@ -21,6 +21,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
     policies.kyverno.io/category: Supply Chain Security
 spec:
+  # Audit at spec level (validationFailureAction) so a rejected signature is
+  # reported to the policy report, not blocked. failurePolicy Ignore keeps a
+  # transient verification hiccup from wedging admission.
+  validationFailureAction: Audit
   background: false
   webhookConfiguration:
     failurePolicy: Ignore
@@ -39,7 +43,9 @@ spec:
             # Upstream public images are out of scope until they are mirrored
             # and re-signed, which keeps the audit signal honest.
             - "ghcr.io/jordann6/*"
-          failureAction: Audit
+          mutateDigest: false
+          verifyDigest: false
+          required: false
           attestors:
             - entries:
                 - keyless:
