@@ -121,6 +121,9 @@ resource "aws_lambda_permission" "rotation" {
   function_name  = aws_lambda_function.rotation.function_name
   principal      = "secretsmanager.amazonaws.com"
   source_account = data.aws_caller_identity.current.account_id
+  # Scope the invoke to this one secret, so only its rotation can call the
+  # function, not any Secrets Manager action in the account.
+  source_arn = aws_secretsmanager_secret.demo.arn
 }
 
 data "aws_caller_identity" "current" {}

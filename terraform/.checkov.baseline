@@ -66,6 +66,12 @@
             "file": "/vpc.tf",
             "findings": [
                 {
+                    "resource": "aws_availability_zones.available",
+                    "check_ids": [
+                        "CKV_AWS_394"
+                    ]
+                },
+                {
                     "resource": "vpc",
                     "check_ids": [
                         "CKV_TF_1"
