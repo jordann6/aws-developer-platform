@@ -16,6 +16,7 @@ An Internal Developer Platform on EKS that gives application teams a paved road:
 | Guardrails | **Kyverno** | Policy-as-code admission control: attribution, hardening, image signing |
 | FinOps | **finops.rego gate** + **OpenCost** | CostCenter enforced in CI and at admission; cluster spend attributed by the same key |
 | Secret distribution | **External Secrets Operator** + Secrets Manager | Secrets synced from AWS Secrets Manager over IRSA; nothing plaintext in Git |
+| Secret rotation | **Rotation Lambda** (four-step contract) | Secrets Manager drives rotation on a schedule; a separate IAM-fenced role is the only identity allowed to write a secret value |
 | Developer portal | **Backstage** | Catalog plus a golden-path microservice template |
 
 ## The self-service flow
@@ -136,7 +137,8 @@ The platform's controls, and the audit expectations they answer, are the same st
 | Runtime hardening | Kyverno: non-root, no priv-esc, limits, no `:latest` | CIS Kubernetes, SOC 2 CC6/CC7 |
 | Supply-chain integrity | Kyverno cosign image verification (Audit) | SOC 2 CC8, SLSA provenance |
 | Change control | GitOps: Git is the source of truth, ArgoCD reconciles | SOC 2 CC8.1, GxP / 21 CFR Part 11 |
-| Secret distribution | ESO syncs from Secrets Manager over IRSA; no secrets in Git | SOC 2 CC6.1, secrets rotation + least privilege |
+| Secret distribution | ESO syncs from Secrets Manager over IRSA; no secrets in Git | SOC 2 CC6.1, least privilege |
+| Secret rotation | Rotation Lambda drives the four-step contract on schedule; a separate IAM-fenced role is the only secret writer | SOC 2 CC6.1, NIST 800-53 IA-5 |
 | Incident response | burn-rate pages routed to responder, human in the loop | operational resilience, SOC 2 CC7 |
 
 ## Tech Stack
@@ -148,4 +150,5 @@ The platform's controls, and the audit expectations they answer, are the same st
 - **Kyverno** 1.13 policy-as-code: attribution, baseline hardening, cosign image verification
 - **FinOps** shared `finops.rego` + Infracost gate (via `platform-guardrails`), **OpenCost** for cluster cost attribution
 - **External Secrets Operator** 0.10 syncing AWS Secrets Manager over IRSA (ClusterSecretStore)
+- **Secret rotation** via a Python Lambda implementing the AWS four-step contract (create/set/test/finish), on a separate IAM-fenced role that is the only identity permitted to write a secret value
 - **Backstage** scaffolder golden-path template (born compliant: labels, limits, SLO, runbook)

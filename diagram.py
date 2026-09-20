@@ -1,5 +1,5 @@
 from diagrams import Diagram, Cluster, Edge
-from diagrams.aws.compute import EKS
+from diagrams.aws.compute import EKS, Lambda
 from diagrams.aws.storage import S3
 from diagrams.aws.security import IAMRole, KMS, SecretsManager
 from diagrams.aws.network import VPC
@@ -39,6 +39,7 @@ with Diagram(
         kms = KMS("Customer-managed\nkey · rotation")
         bucket = S3("Hardened S3 bucket\nSSE-KMS · TLS-only\npublic-access-blocked")
         secrets = SecretsManager("Secrets Manager\nadp/*")
+        rotation = Lambda("Secret rotation\nfour-step contract")
 
     repo >> Edge(label="reconciles") >> argo
     argo >> Edge(label="syncs") >> [crossplane, kyverno, eso, opencost, observ]
@@ -46,3 +47,4 @@ with Diagram(
     irsa >> Edge(label="provisions on claim") >> bucket
     bucket >> Edge(label="SSE-KMS", style="dashed") >> kms
     eso >> Edge(label="syncs secrets (IRSA)") >> secrets
+    rotation >> Edge(label="rotates · four-step", style="dashed") >> secrets

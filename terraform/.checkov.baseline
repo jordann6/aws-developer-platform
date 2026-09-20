@@ -12,14 +12,52 @@
             ]
         },
         {
+            "file": "/external-secrets.tf",
+            "findings": [
+                {
+                    "resource": "aws_secretsmanager_secret.demo",
+                    "check_ids": [
+                        "CKV_AWS_149"
+                    ]
+                }
+            ]
+        },
+        {
             "file": "/iam-irsa.tf",
             "findings": [
+                {
+                    "resource": "aws_iam_policy_document.crossplane_kms",
+                    "check_ids": [
+                        "CKV_AWS_109",
+                        "CKV_AWS_111",
+                        "CKV_AWS_356"
+                    ]
+                },
                 {
                     "resource": "aws_iam_policy_document.crossplane_s3",
                     "check_ids": [
                         "CKV_AWS_109",
                         "CKV_AWS_111",
                         "CKV_AWS_356"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/secret-rotation.tf",
+            "findings": [
+                {
+                    "resource": "aws_cloudwatch_log_group.rotation",
+                    "check_ids": [
+                        "CKV_AWS_158"
+                    ]
+                },
+                {
+                    "resource": "aws_lambda_function.rotation",
+                    "check_ids": [
+                        "CKV_AWS_116",
+                        "CKV_AWS_117",
+                        "CKV_AWS_272"
                     ]
                 }
             ]

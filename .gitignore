@@ -7,6 +7,10 @@ tf.plan
 terraform.tfvars
 *.tfvars
 
+# Terraform-built Lambda artifact (regenerated from rotation/rotation.py)
+terraform/rotation/rotation.zip
+__pycache__/
+
 # Backstage scaffolder / node
 node_modules/
 
